@@ -1,0 +1,98 @@
+name: Automated Widescreen Documentary Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Documentary topic"
+        required: false
+        type: string
+      target_minutes:
+        description: "Target duration in minutes"
+        required: false
+        default: "15"
+        type: string
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      TOPIC: ${{ inputs.topic }}
+      TARGET_DURATION_MINUTES: ${{ inputs.target_minutes || '15' }}
+      MIN_SCENES: "24"
+      MAX_SCENES: "60"
+      VIDEO_WIDTH: "1920"
+      VIDEO_HEIGHT: "1080"
+      VIDEO_FPS: "30"
+      VIDEO_CRF: "20"
+      VIDEO_PRESET: "veryfast"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate configuration
+        run: |
+          python - <<'PY'
+          import os, sys
+          missing = [x for x in ("GEMINI_API_KEY", "PEXELS_API_KEY") if not os.getenv(x)]
+          if missing:
+              print("Missing GitHub Secrets:", ", ".join(missing))
+              sys.exit(1)
+          print("Configuration OK")
+          PY
+
+      - name: Run documentary pipeline
+        run: |
+          python main.py
+
+      - name: Validate output
+        run: |
+          test -s output/final_documentary.mp4
+          ffprobe -v error -show_entries format=duration,size \
+            -of default=noprint_wrappers=1 output/final_documentary.mp4
+
+      - name: Upload final video
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentary-video
+          path: output/final_documentary.mp4
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload debug metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentary-debug
+          path: |
+            output/*.json
+            output/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
