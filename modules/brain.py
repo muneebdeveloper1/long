@@ -50,13 +50,13 @@ class Brain:
         # Primary model.
         primary_model = os.getenv(
             "GEMINI_MODEL",
-            "gemini-2.5-flash",
+            "gemini-3.5-flash",
         ).strip()
 
         # Optional comma-separated fallback models.
         fallback_models_raw = os.getenv(
             "GEMINI_FALLBACK_MODELS",
-            "gemini-2.5-flash-lite,gemini-2.0-flash",
+            "gemini-3.5-flash-lite,gemini-3.0-flash",
         )
 
         fallback_models = [
